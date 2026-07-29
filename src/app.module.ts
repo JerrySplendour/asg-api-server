@@ -62,7 +62,7 @@ const allEntities = [
             password: configService.get<string>('DB_PASSWORD'),
             database: configService.get<string>('DB_DATABASE'),
             entities: allEntities,
-            synchronize: nodeEnv === 'development',
+            synchronize: configService.get<string>('DB_SYNCHRONIZE', 'false') === 'true' || nodeEnv === 'development',
             logging: false,
             ssl: nodeEnv === 'production' ? { rejectUnauthorized: false } : false,
           };
@@ -88,4 +88,4 @@ const allEntities = [
     GatewayModule,
   ],
 })
-export class AppModule {}
+export class AppModule { }
