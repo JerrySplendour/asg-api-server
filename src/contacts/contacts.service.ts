@@ -284,6 +284,7 @@ import { Contact } from './entities/contact.entity';
 import { EmergencyContact } from './entities/emergency-contact.entity';
 import { ContactRequest } from './entities/contact-request.entity';
 import { User } from '../common/entities/user.entity';
+import { logger } from '../lib/logger';
 
 @Injectable()
 export class ContactsService {
@@ -312,7 +313,12 @@ export class ContactsService {
 
   // Regular Contacts
   async getContacts(userId: string): Promise<Contact[]> {
-    return this.contactRepository.find({ where: { userId } });
+    try {
+      return await this.contactRepository.find({ where: { userId } });
+    } catch (error) {
+      logger.error({ err: error, userId }, 'Failed to fetch contacts');
+      throw error;
+    }
   }
 
   async getContactById(userId: string, id: string): Promise<Contact> {
@@ -322,39 +328,43 @@ export class ContactsService {
   }
 
   async addContact(userId: string, contactData: any): Promise<Contact> {
-    // 1. Save local contact record
-    const contact = this.contactRepository.create({ ...contactData, userId });
-    const saved = await this.contactRepository.save(contact);
-    const resultContact = Array.isArray(saved) ? saved[0] : saved;
+    try {
+      // 1. Save local contact record
+      const contact = this.contactRepository.create({ ...contactData, userId });
+      const saved = await this.contactRepository.save(contact);
+      const resultContact = Array.isArray(saved) ? saved[0] : saved;
 
-    // 2. Check if phone number exists in DB
-    if (contactData.phoneNumber) {
-      const targetUser = await this.findUserByPhone(contactData.phoneNumber);
+      // 2. Check if phone number exists in DB
+      if (contactData.phoneNumber) {
+        const targetUser = await this.findUserByPhone(contactData.phoneNumber);
 
-      // Don't send request to self
-      if (targetUser && targetUser.id !== userId) {
-        const senderUser = await this.userRepository.findOne({ where: { id: userId } });
-        const senderName = senderUser?.displayName || senderUser?.email || 'A user';
+        // Don't send request to self
+        if (targetUser && targetUser.id !== userId) {
+          const senderUser = await this.userRepository.findOne({ where: { id: userId } });
+          const senderName = senderUser?.displayName || senderUser?.email || 'A user';
 
-        // Prevent duplicate pending requests
-        const existingRequest = await this.contactRequestRepository.findOne({
-          where: { fromUserId: userId, toUserId: targetUser.id, status: 'pending' },
-        });
+          // Prevent duplicate pending requests
+          const existingRequest = await this.contactRequestRepository.findOne({
+            where: { fromUserId: userId, toUserId: targetUser.id, status: 'pending' },
+          });
 
-        if (!existingRequest) {
-          // Reuses your original sendContactRequest method!
-          await this.sendContactRequest(
-            userId,
-            targetUser.id,
-            senderName,
-            contactData.category || 'friend',
-            contactData.message || `${senderName} added you as a contact`,
-          );
+          if (!existingRequest) {
+            await this.sendContactRequest(
+              userId,
+              targetUser.id,
+              senderName,
+              contactData.category || 'friend',
+              contactData.message || `${senderName} added you as a contact`,
+            );
+          }
         }
       }
-    }
 
-    return resultContact;
+      return resultContact;
+    } catch (error) {
+      logger.error({ err: error, userId, contactData }, 'Failed to add contact');
+      throw error;
+    }
   }
 
   async updateContact(userId: string, id: string, updates: any): Promise<Contact> {
