@@ -31,6 +31,17 @@ export class ContactsController {
     return this.contactsService.getContacts(req.user.userId);
   }
 
+  @Post('emergency')
+  async addEmergencyContact(@Req() req: AuthenticatedRequest, @Body() body: any) {
+    return this.contactsService.addEmergencyContact(req.user.userId, body);
+  }
+
+  // Contact Requests
+  @Get('requests')
+  async getPendingContactRequests(@Req() req: AuthenticatedRequest) {
+    return this.contactsService.getPendingContactRequests(req.user.userId);
+  }
+
   @Get(':id')
   async getContactById(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.contactsService.getContactById(req.user.userId, id);
@@ -57,11 +68,6 @@ export class ContactsController {
     return this.contactsService.getEmergencyContacts(req.user.userId);
   }
 
-  @Post('emergency')
-  async addEmergencyContact(@Req() req: AuthenticatedRequest, @Body() body: any) {
-    return this.contactsService.addEmergencyContact(req.user.userId, body);
-  }
-
   @Patch('emergency/:id')
   async updateEmergencyContact(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() body: any) {
     return this.contactsService.updateEmergencyContact(req.user.userId, id, body);
@@ -70,12 +76,6 @@ export class ContactsController {
   @Delete('emergency/:id')
   async deleteEmergencyContact(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.contactsService.deleteEmergencyContact(req.user.userId, id);
-  }
-
-  // Contact Requests
-  @Get('requests')
-  async getPendingContactRequests(@Req() req: AuthenticatedRequest) {
-    return this.contactsService.getPendingContactRequests(req.user.userId);
   }
 
   @Post('requests')
