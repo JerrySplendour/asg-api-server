@@ -33,7 +33,7 @@ export class UserCheckIn {
    * UTC timestamp (ms) of the last confirmed check-in.
    * Reset by the user tapping the notification or pressing "I'm OK" in-app.
    */
-  @Column('bigint', { default: () => "(strftime('%s','now') * 1000)" })
+  @Column('bigint', { default: () => '0' })
   lastConfirmedAt!: number;
 
   /**
