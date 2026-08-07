@@ -8,7 +8,7 @@ import { User } from '../common/entities/user.entity';
 import { Contact } from '../contacts/entities/contact.entity';
 import { EmergencyAlert } from '../emergency/entities/emergency-alert.entity';
 
-const SIX_HOURS_MS   = 6  * 60 * 60 * 1000;
+const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
 const FIFTEEN_HOURS_MS = 15 * 60 * 60 * 1000;
 
@@ -26,7 +26,7 @@ export class CheckInSchedulerService {
     @InjectRepository(EmergencyAlert)
     private alertRepository: Repository<EmergencyAlert>,
     private fcmService: FcmService,
-  ) {}
+  ) { }
 
   // ─── Public API ─────────────────────────────────────────────────────────────
 
@@ -143,7 +143,7 @@ export class CheckInSchedulerService {
       if (user.fcmToken) {
         await this.fcmService.sendToDevice(user.fcmToken, {
           title: '⚠️ Safety Check-In',
-          body: 'We haven't heard from you. Please confirm you're okay — your contacts will be alerted if you don't respond soon.',
+          body: `We haven't heard from you. Please confirm you're okay — your contacts will be alerted if you don't respond soon.`,
           priority: 'high',
           androidChannelId: 'asg_checkin',
           data: {

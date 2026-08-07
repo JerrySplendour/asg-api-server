@@ -29,6 +29,7 @@ import { UserModule } from './user/user.module';
 import { GatewayModule } from './gateway/gateway.module';
 import { CategoriesModule } from './categories/categories.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { VisibilitySettings } from './visibility/entities/visibility-settings.entity';
 
 const allEntities = [
   User,
