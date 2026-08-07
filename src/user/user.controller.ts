@@ -75,4 +75,18 @@ export class UserController {
   async updatePrivacySettings(@Req() req: Request, @Body() updates: any) {
     return updates;
   }
+
+  /**
+   * PATCH /user/fcm-token
+   * Body: { fcmToken: string }
+   * Registers or refreshes the device FCM token for the authenticated user.
+   * Called by the frontend on app startup and whenever the token is refreshed.
+   */
+  @Patch('fcm-token')
+  async updateFcmToken(@Req() req: Request, @Body() body: { fcmToken: string }) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const user: any = (req as any).user;
+    await this.userService.updateFcmToken(user.userId, body.fcmToken);
+    return { success: true };
+  }
 }

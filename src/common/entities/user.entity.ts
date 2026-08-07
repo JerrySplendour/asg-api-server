@@ -33,6 +33,10 @@ export class User {
   @Column({ nullable: true })
   avatarUrl?: string;
 
+  /** Firebase Cloud Messaging device token — updated on each app launch. */
+  @Column({ nullable: true })
+  fcmToken?: string;
+
   @Column({ default: true })
   isActive!: boolean;
 

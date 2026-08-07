@@ -1,12 +1,16 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { ModuleRef } from '@nestjs/core';
 import { Contact } from './entities/contact.entity';
 import { EmergencyContact } from './entities/emergency-contact.entity';
 import { ContactRequest } from './entities/contact-request.entity';
 import { User } from '../common/entities/user.entity';
 import { logger } from '../lib/logger';
 import { TrackingGateway } from '../gateway/tracking.gateway';
+
+/** Default category name contacts fall back to when their category is deleted. */
+const FALLBACK_CATEGORY = 'friend';
 
 @Injectable()
 export class ContactsService {
@@ -20,6 +24,7 @@ export class ContactsService {
     @InjectRepository(User)
     private userRepository: Repository<User>,
     private trackingGateway: TrackingGateway,
+    private moduleRef: ModuleRef,
   ) { }
 
   async findUserByPhone(phoneNumber: string): Promise<User | null> {
@@ -34,7 +39,8 @@ export class ContactsService {
       .getOne();
   }
 
-  // Regular Contacts
+  // ─── Regular Contacts ───────────────────────────────────────────────────────
+
   async getContacts(userId: string): Promise<Contact[]> {
     try {
       return await this.contactRepository.find({ where: { userId } });
@@ -62,7 +68,8 @@ export class ContactsService {
         if (targetUser && targetUser.id !== userId) {
           const senderUser = await this.userRepository.findOne({ where: { id: userId } });
           const senderName = senderUser?.displayName || senderUser?.email || 'A user';
-          const category = contactData.category || 'friend';
+          const category = contactData.category || FALLBACK_CATEGORY;
+          const categoryBehaviorType = contactData.categoryBehaviorType || 'STANDARD';
 
           const existingRequest = await this.contactRequestRepository.findOne({
             where: { fromUserId: userId, toUserId: targetUser.id, status: 'pending' },
@@ -74,6 +81,7 @@ export class ContactsService {
               targetUser.id,
               senderName,
               category,
+              categoryBehaviorType,
               contactData.message || `${senderName} added you as a contact`,
             );
 
@@ -87,6 +95,7 @@ export class ContactsService {
               senderName,
               request.id,
               category,
+              categoryBehaviorType,
             );
           } else {
             await this.contactRepository.update(
@@ -113,7 +122,8 @@ export class ContactsService {
     await this.contactRepository.delete({ id, userId });
   }
 
-  // Emergency Contacts
+  // ─── Emergency Contacts ─────────────────────────────────────────────────────
+
   async getEmergencyContacts(userId: string): Promise<EmergencyContact[]> {
     return this.emergencyContactRepository.find({ where: { userId } });
   }
@@ -139,7 +149,8 @@ export class ContactsService {
     await this.emergencyContactRepository.delete({ id, userId });
   }
 
-  // Contact Requests
+  // ─── Contact Requests ───────────────────────────────────────────────────────
+
   async getPendingContactRequests(userId: string): Promise<ContactRequest[]> {
     return this.contactRequestRepository.find({
       where: { toUserId: userId, status: 'pending' },
@@ -151,6 +162,7 @@ export class ContactsService {
     toUserId: string,
     fromUserName: string,
     category: string,
+    categoryBehaviorType: 'STANDARD' | 'PROFESSIONAL' = 'STANDARD',
     message?: string,
   ): Promise<ContactRequest> {
     const request = this.contactRequestRepository.create({
@@ -158,58 +170,121 @@ export class ContactsService {
       toUserId,
       fromUserName,
       category,
+      categoryBehaviorType,
       message,
     });
-    return this.contactRequestRepository.save(request);
+    const saved = await this.contactRequestRepository.save(request);
+
+    // Send FCM push notification to the recipient
+    const recipientUser = await this.userRepository.findOne({
+      where: { id: toUserId },
+      select: ['fcmToken'],
+    });
+
+    if (recipientUser?.fcmToken) {
+      // Lazy load FcmService to avoid circular dependency issues if they exist
+      const fcmService = this.moduleRef.get('FcmService', { strict: false });
+      if (fcmService) {
+        await fcmService.sendToDevice(recipientUser.fcmToken, {
+          title: 'New Contact Request',
+          body: `${fromUserName} wants to add you as a contact`,
+          priority: 'high',
+          androidChannelId: 'asg_default',
+          data: {
+            type: 'contact_request',
+            deepLink: '/contacts',
+          },
+        });
+      }
+    }
+
+    return saved;
   }
 
-  async acceptContactRequest(userId: string, requestId: string): Promise<Contact> {
+  /**
+   * Accept a contact request with asymmetric category support:
+   *
+   * - STANDARD:     `recipientCategory` is required — the acceptor chooses
+   *                 which category they place the sender in.
+   * - PROFESSIONAL: `recipientCategory` is ignored — the sender's category
+   *                 is used for both sides.
+   */
+  async acceptContactRequest(
+    userId: string,
+    requestId: string,
+    recipientCategory?: string,
+  ): Promise<Contact> {
     const request = await this.contactRequestRepository.findOne({
       where: { id: requestId, toUserId: userId },
     });
     if (!request) throw new NotFoundException('Contact request not found');
 
-    await this.contactRequestRepository.update({ id: requestId }, { status: 'accepted' });
+    // Determine which category the acceptor places the sender in
+    let acceptorSideCategory: string;
+    if (request.categoryBehaviorType === 'PROFESSIONAL') {
+      // Forced — use sender's category
+      acceptorSideCategory = request.category;
+    } else {
+      // STANDARD — recipient must provide a category
+      if (!recipientCategory) {
+        throw new BadRequestException(
+          'recipientCategory is required when accepting a STANDARD contact request',
+        );
+      }
+      acceptorSideCategory = recipientCategory;
+    }
+
+    await this.contactRequestRepository.update(
+      { id: requestId },
+      {
+        status: 'accepted',
+        respondedAt: new Date(),
+        recipientCategory: acceptorSideCategory,
+      },
+    );
 
     const acceptorUser = await this.userRepository.findOne({ where: { id: userId } });
     const requesterUser = await this.userRepository.findOne({ where: { id: request.fromUserId } });
 
+    // Create the contact entry on the ACCEPTOR's side
+    // (acceptor views the sender through acceptorSideCategory)
     const contactForAcceptor = this.contactRepository.create({
       userId,
       name: request.fromUserName,
       email: requesterUser?.email || '',
       phoneNumber: requesterUser?.phoneNumber || '',
       relationship: 'friend',
-      category: request.category,
+      category: acceptorSideCategory,
       requestStatus: 'accepted',
       isTracked: true,
       linkedUserId: request.fromUserId,
     });
     const saved = await this.contactRepository.save(contactForAcceptor);
 
-    await this.contactRepository.update(
-      { userId: request.fromUserId, phoneNumber: acceptorUser?.phoneNumber || '' },
-      { requestStatus: 'accepted', linkedUserId: userId },
-    );
+    // Update or create the contact entry on the SENDER's side
+    // (sender placed acceptor in request.category — the originally requested category)
+    const existingRequesterContact = await this.contactRepository.findOne({
+      where: { userId: request.fromUserId, linkedUserId: userId },
+    });
 
-    if (acceptorUser) {
-      const existingReverse = await this.contactRepository.findOne({
-        where: { userId: request.fromUserId, linkedUserId: userId },
+    if (existingRequesterContact) {
+      await this.contactRepository.update(
+        { id: existingRequesterContact.id },
+        { requestStatus: 'accepted', linkedUserId: userId },
+      );
+    } else if (acceptorUser) {
+      const contactForRequester = this.contactRepository.create({
+        userId: request.fromUserId,
+        name: acceptorUser.displayName || acceptorUser.email,
+        email: acceptorUser.email || '',
+        phoneNumber: acceptorUser.phoneNumber || '',
+        relationship: 'friend',
+        category: request.category, // sender placed acceptor in their original chosen category
+        requestStatus: 'accepted',
+        isTracked: true,
+        linkedUserId: userId,
       });
-      if (!existingReverse) {
-        const contactForRequester = this.contactRepository.create({
-          userId: request.fromUserId,
-          name: acceptorUser.displayName || acceptorUser.email,
-          email: acceptorUser.email || '',
-          phoneNumber: acceptorUser.phoneNumber || '',
-          relationship: 'friend',
-          category: request.category,
-          requestStatus: 'accepted',
-          isTracked: true,
-          linkedUserId: userId,
-        });
-        await this.contactRepository.save(contactForRequester);
-      }
+      await this.contactRepository.save(contactForRequester);
     }
 
     return Array.isArray(saved) ? saved[0] : saved;
@@ -218,11 +293,12 @@ export class ContactsService {
   async rejectContactRequest(userId: string, requestId: string): Promise<void> {
     await this.contactRequestRepository.update(
       { id: requestId, toUserId: userId },
-      { status: 'rejected' },
+      { status: 'rejected', respondedAt: new Date() },
     );
   }
 
-  // Device Contacts Sync
+  // ─── Device Contacts Sync ───────────────────────────────────────────────────
+
   async syncDeviceContacts(userId: string, deviceContacts: any[]): Promise<Contact[]> {
     const contacts: Contact[] = [];
     for (const dc of deviceContacts) {
@@ -244,6 +320,7 @@ export class ContactsService {
           email: dc.email || '',
           deviceContactId: dc.id,
           relationship: 'friend',
+          category: FALLBACK_CATEGORY,
         });
         contacts.push(await this.contactRepository.save(contact));
       }

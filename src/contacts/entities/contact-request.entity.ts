@@ -23,15 +23,30 @@ export class ContactRequest {
   @Column()
   toUserId!: string;
 
-  @Column({
-    type: 'varchar',
-    enum: ['family', 'company', 'missionaries', 'regular', 'untracked'],
-  })
+  /**
+   * The category the sender wants User B placed in (for PROFESSIONAL)
+   * or wants themselves placed in on User B's side (for STANDARD).
+   * Free-form varchar to support custom categories.
+   */
+  @Column({ type: 'varchar' })
   category!: string;
+
+  /**
+   * STANDARD    – Recipient can choose their own category for the sender.
+   * PROFESSIONAL – Recipient is forced to accept the sender under 'category'.
+   */
+  @Column({ type: 'varchar', default: 'STANDARD' })
+  categoryBehaviorType!: 'STANDARD' | 'PROFESSIONAL';
+
+  /**
+   * The category the RECIPIENT chose to place the sender in.
+   * Only meaningful for STANDARD requests, populated on acceptance.
+   */
+  @Column({ type: 'varchar', nullable: true })
+  recipientCategory?: string;
 
   @Column({
     type: 'varchar',
-    enum: ['pending', 'accepted', 'rejected', 'blocked'],
     default: 'pending',
   })
   status!: string;

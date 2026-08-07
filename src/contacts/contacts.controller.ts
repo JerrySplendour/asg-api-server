@@ -36,7 +36,8 @@ export class ContactsController {
     return this.contactsService.addEmergencyContact(req.user.userId, body);
   }
 
-  // Contact Requests
+  // ─── Contact Requests ───────────────────────────────────────────────────────
+
   @Get('requests')
   async getPendingContactRequests(@Req() req: AuthenticatedRequest) {
     return this.contactsService.getPendingContactRequests(req.user.userId);
@@ -53,7 +54,11 @@ export class ContactsController {
   }
 
   @Patch(':id')
-  async updateContact(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() body: any) {
+  async updateContact(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: any,
+  ) {
     return this.contactsService.updateContact(req.user.userId, id, body);
   }
 
@@ -62,14 +67,19 @@ export class ContactsController {
     return this.contactsService.deleteContact(req.user.userId, id);
   }
 
-  // Emergency Contacts
+  // ─── Emergency Contacts ─────────────────────────────────────────────────────
+
   @Get('emergency')
   async getEmergencyContacts(@Req() req: AuthenticatedRequest) {
     return this.contactsService.getEmergencyContacts(req.user.userId);
   }
 
   @Patch('emergency/:id')
-  async updateEmergencyContact(@Req() req: AuthenticatedRequest, @Param('id') id: string, @Body() body: any) {
+  async updateEmergencyContact(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: any,
+  ) {
     return this.contactsService.updateEmergencyContact(req.user.userId, id, body);
   }
 
@@ -80,26 +90,45 @@ export class ContactsController {
 
   @Post('requests')
   async sendContactRequest(@Req() req: AuthenticatedRequest, @Body() body: any) {
+    const categoryBehaviorType: 'STANDARD' | 'PROFESSIONAL' =
+      body.categoryBehaviorType === 'PROFESSIONAL' ? 'PROFESSIONAL' : 'STANDARD';
+
     const result = await this.contactsService.sendContactRequest(
       req.user.userId,
       body.toUserId,
       body.fromUserName,
       body.category,
+      categoryBehaviorType,
       body.message,
     );
-    // Real-time notification to the recipient
+
+    // Real-time WebSocket notification to the recipient
     this.trackingGateway.notifyContactRequest(
       body.toUserId,
       body.fromUserName,
       result.id,
       body.category,
+      categoryBehaviorType,
     );
     return result;
   }
 
+  /**
+   * POST /contacts/requests/:id/accept
+   * Body (for STANDARD requests): { recipientCategory: string }
+   * Body (for PROFESSIONAL requests): {} — recipientCategory is ignored
+   */
   @Post('requests/:id/accept')
-  async acceptContactRequest(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
-    return this.contactsService.acceptContactRequest(req.user.userId, id);
+  async acceptContactRequest(
+    @Req() req: AuthenticatedRequest,
+    @Param('id') id: string,
+    @Body() body: { recipientCategory?: string },
+  ) {
+    return this.contactsService.acceptContactRequest(
+      req.user.userId,
+      id,
+      body.recipientCategory,
+    );
   }
 
   @Post('requests/:id/reject')
@@ -107,9 +136,13 @@ export class ContactsController {
     return this.contactsService.rejectContactRequest(req.user.userId, id);
   }
 
-  // Device Contact Sync
+  // ─── Device Contact Sync ────────────────────────────────────────────────────
+
   @Post('device/sync')
-  async syncDeviceContacts(@Req() req: AuthenticatedRequest, @Body() body: { contacts: any[] }) {
+  async syncDeviceContacts(
+    @Req() req: AuthenticatedRequest,
+    @Body() body: { contacts: any[] },
+  ) {
     return this.contactsService.syncDeviceContacts(req.user.userId, body.contacts);
   }
 
@@ -117,7 +150,6 @@ export class ContactsController {
    * POST /contacts/platform/lookup
    * Body: { phoneNumbers: string[] }
    * Returns which phone numbers belong to registered ASG users.
-   * Used by the app to know who you can send a contact request to.
    */
   @Post('platform/lookup')
   async lookupPlatformUsers(@Body() body: { phoneNumbers: string[] }) {

@@ -148,6 +148,7 @@ export class LocationsService {
         name: contact.name,
         category: contact.category,
         requestStatus: contact.requestStatus,
+        lastUpdated: latestLocation ? latestLocation.recordedAt.toISOString() : null,
         location: latestLocation
           ? {
               latitude: latestLocation.latitude,

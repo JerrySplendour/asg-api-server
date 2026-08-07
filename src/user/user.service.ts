@@ -66,4 +66,18 @@ export class UserService {
     user.password = await bcrypt.hash(newPassword, 10);
     await this.userRepository.save(user);
   }
+
+  /** Persist the FCM device token for push notifications. */
+  async updateFcmToken(userId: string, fcmToken: string): Promise<void> {
+    await this.userRepository.update({ id: userId }, { fcmToken });
+  }
+
+  /** Retrieve the FCM token for a given user (internal use by notification services). */
+  async getFcmToken(userId: string): Promise<string | null> {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+      select: ['fcmToken'],
+    });
+    return user?.fcmToken ?? null;
+  }
 }

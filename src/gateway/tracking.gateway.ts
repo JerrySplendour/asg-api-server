@@ -192,11 +192,18 @@ export class TrackingGateway implements OnGatewayConnection, OnGatewayDisconnect
    * Called by the contacts service to notify a user of a new contact request.
    * Exposed as a public method so other services can call it.
    */
-  notifyContactRequest(toUserId: string, fromUserName: string, requestId: string, category: string) {
+  notifyContactRequest(
+    toUserId: string,
+    fromUserName: string,
+    requestId: string,
+    category: string,
+    categoryBehaviorType: 'STANDARD' | 'PROFESSIONAL' = 'STANDARD',
+  ) {
     this.server.to(`user-${toUserId}`).emit('contact-request', {
       requestId,
       fromUserName,
       category,
+      categoryBehaviorType,
       timestamp: Date.now(),
     });
   }

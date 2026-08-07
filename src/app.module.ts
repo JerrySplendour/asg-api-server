@@ -14,7 +14,8 @@ import { Trip } from './trips/entities/trip.entity';
 import { EmergencyAlert } from './emergency/entities/emergency-alert.entity';
 import { Geofence } from './geofences/entities/geofence.entity';
 import { GeofenceEvent } from './geofences/entities/geofence-event.entity';
-import { VisibilitySettings } from './visibility/entities/visibility-settings.entity';
+import { UserCategory } from './categories/entities/category.entity';
+import { UserCheckIn } from './notifications/entities/user-check-in.entity';
 
 // Modules
 import { AuthModule } from './auth/auth.module';
@@ -26,6 +27,8 @@ import { GeofencesModule } from './geofences/geofences.module';
 import { VisibilityModule } from './visibility/visibility.module';
 import { UserModule } from './user/user.module';
 import { GatewayModule } from './gateway/gateway.module';
+import { CategoriesModule } from './categories/categories.module';
+import { NotificationsModule } from './notifications/notifications.module';
 
 const allEntities = [
   User,
@@ -39,6 +42,8 @@ const allEntities = [
   Geofence,
   GeofenceEvent,
   VisibilitySettings,
+  UserCategory,
+  UserCheckIn,
 ];
 
 @Module({
@@ -86,6 +91,8 @@ const allEntities = [
     VisibilityModule,
     UserModule,
     GatewayModule,
+    CategoriesModule,
+    NotificationsModule,
   ],
 })
 export class AppModule { }

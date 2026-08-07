@@ -36,11 +36,12 @@ export class Contact {
   @Column({ default: false })
   isEmergencyContact!: boolean;
 
-  @Column({
-    type: 'varchar',
-    enum: ['family', 'company', 'missionaries', 'regular', 'untracked'],
-    default: 'regular',
-  })
+  /**
+   * Free-form category string — no enum constraint so it supports
+   * user-defined custom categories.  System defaults are:
+   *   family | friend | company | missionaries | public_service
+   */
+  @Column({ type: 'varchar', default: 'friend' })
   category!: string;
 
   @Column({ default: false })
@@ -48,7 +49,6 @@ export class Contact {
 
   @Column({
     type: 'varchar',
-    enum: ['pending', 'accepted', 'rejected', 'blocked'],
     nullable: true,
   })
   requestStatus?: string;
