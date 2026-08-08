@@ -12,7 +12,7 @@ import { User } from '../../common/entities/user.entity';
  * A category that a user can use to organise their contacts.
  *
  * System categories (isSystem=true) are seeded on startup and cannot be
- * renamed or deleted by users, but their behavior type CAN be changed.
+ * renamed, deleted, or changed by users.
  *
  * Custom categories are user-scoped and deletable; when deleted, any
  * contacts in that category automatically revert to the system "friend"

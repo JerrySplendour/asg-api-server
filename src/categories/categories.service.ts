@@ -92,9 +92,10 @@ export class CategoriesService implements OnApplicationBootstrap {
     const cat = await this.categoryRepository.findOne({ where: { id } });
     if (!cat) throw new NotFoundException('Category not found');
 
-    // System categories: allow behaviour type / colour change but NOT name
-    if (cat.isSystem && data.name && data.name !== cat.name) {
-      throw new ForbiddenException('Cannot rename a system category');
+    // System categories are shared defaults, so users cannot mutate their
+    // behavior or appearance for every account.
+    if (cat.isSystem) {
+      throw new ForbiddenException('System categories cannot be edited');
     }
 
     // Custom categories must belong to the requesting user
@@ -103,7 +104,7 @@ export class CategoriesService implements OnApplicationBootstrap {
     }
 
     const updates: Partial<UserCategory> = {};
-    if (!cat.isSystem && data.name) updates.name = data.name.toLowerCase().trim();
+    if (data.name) updates.name = data.name.toLowerCase().trim();
     if (data.behaviorType) updates.behaviorType = data.behaviorType;
     if (data.color !== undefined) updates.color = data.color;
 

@@ -5,6 +5,7 @@ import { EmergencyAlert } from './entities/emergency-alert.entity';
 import { Contact } from '../contacts/entities/contact.entity';
 import { User } from '../common/entities/user.entity';
 import { FcmService } from '../notifications/fcm.service';
+import { VisibilitySettings } from '../visibility/entities/visibility-settings.entity';
 
 @Injectable()
 export class EmergencyService {
@@ -15,6 +16,8 @@ export class EmergencyService {
     private contactRepository: Repository<Contact>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    @InjectRepository(VisibilitySettings)
+    private visibilitySettingsRepository: Repository<VisibilitySettings>,
     private fcmService: FcmService,
   ) {}
 
@@ -70,20 +73,27 @@ export class EmergencyService {
   }
 
   /**
-   * Sends high-priority FCM push notifications to all accepted contacts of the user.
+   * Sends high-priority FCM push notifications to family and explicitly
+   * high-priority categories, never to every tracked contact by default.
    * Used both for manual panic and auto-triggered escalations.
    */
   async sendPanicNotifications(userId: string, type: string = 'panic'): Promise<void> {
     const triggerUser = await this.userRepository.findOne({ where: { id: userId } });
     const senderName = triggerUser?.displayName || 'A contact';
 
-    // Collect all accepted, tracked contacts
+    const settings = await this.visibilitySettingsRepository.find({ where: { userId } });
+    const panicCategories = new Set([
+      'family',
+      ...settings.filter((setting) => setting.isPanicCategory).map((setting) => setting.category),
+    ]);
+
+    // Collect only accepted contacts in the configured emergency categories.
     const contacts = await this.contactRepository.find({
       where: { userId, requestStatus: 'accepted', isTracked: true },
     });
 
     const fcmTokens: string[] = [];
-    for (const contact of contacts) {
+    for (const contact of contacts.filter((contact) => panicCategories.has(contact.category))) {
       if (!contact.linkedUserId) continue;
       const contactUser = await this.userRepository.findOne({
         where: { id: contact.linkedUserId },

@@ -1,13 +1,14 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { ModuleRef } from '@nestjs/core';
 import { Contact } from './entities/contact.entity';
 import { EmergencyContact } from './entities/emergency-contact.entity';
 import { ContactRequest } from './entities/contact-request.entity';
 import { User } from '../common/entities/user.entity';
 import { logger } from '../lib/logger';
 import { TrackingGateway } from '../gateway/tracking.gateway';
+import { FcmService } from '../notifications/fcm.service';
+import { UserCategory } from '../categories/entities/category.entity';
 
 /** Default category name contacts fall back to when their category is deleted. */
 const FALLBACK_CATEGORY = 'friend';
@@ -23,8 +24,10 @@ export class ContactsService {
     private contactRequestRepository: Repository<ContactRequest>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
+    @InjectRepository(UserCategory)
+    private categoryRepository: Repository<UserCategory>,
     private trackingGateway: TrackingGateway,
-    private moduleRef: ModuleRef,
+    private fcmService: FcmService,
   ) { }
 
   async findUserByPhone(phoneNumber: string): Promise<User | null> {
@@ -37,6 +40,16 @@ export class ContactsService {
         { phone: normalized },
       )
       .getOne();
+  }
+
+  async getSenderDetails(userId: string): Promise<string> {
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    return user.displayName || user.email;
+  }
+
+  async getCategoryBehaviorTypeForRequest(userId: string, categoryName: string) {
+    return this.getCategoryBehaviorType(userId, categoryName);
   }
 
   // ─── Regular Contacts ───────────────────────────────────────────────────────
@@ -69,7 +82,7 @@ export class ContactsService {
           const senderUser = await this.userRepository.findOne({ where: { id: userId } });
           const senderName = senderUser?.displayName || senderUser?.email || 'A user';
           const category = contactData.category || FALLBACK_CATEGORY;
-          const categoryBehaviorType = contactData.categoryBehaviorType || 'STANDARD';
+          const categoryBehaviorType = await this.getCategoryBehaviorType(userId, category);
 
           const existingRequest = await this.contactRequestRepository.findOne({
             where: { fromUserId: userId, toUserId: targetUser.id, status: 'pending' },
@@ -182,20 +195,16 @@ export class ContactsService {
     });
 
     if (recipientUser?.fcmToken) {
-      // Lazy load FcmService to avoid circular dependency issues if they exist
-      const fcmService = this.moduleRef.get('FcmService', { strict: false });
-      if (fcmService) {
-        await fcmService.sendToDevice(recipientUser.fcmToken, {
-          title: 'New Contact Request',
-          body: `${fromUserName} wants to add you as a contact`,
-          priority: 'high',
-          androidChannelId: 'asg_default',
-          data: {
-            type: 'contact_request',
-            deepLink: '/contacts',
-          },
-        });
-      }
+      await this.fcmService.sendToDevice(recipientUser.fcmToken, {
+        title: 'New Contact Request',
+        body: `${fromUserName} wants to add you as a contact`,
+        priority: 'high',
+        androidChannelId: 'asg_default',
+        data: {
+          type: 'contact_request',
+          deepLink: '/contacts',
+        },
+      });
     }
 
     return saved;
@@ -231,6 +240,9 @@ export class ContactsService {
           'recipientCategory is required when accepting a STANDARD contact request',
         );
       }
+      // Recipients can only choose a category that belongs to them (or a
+      // system default), rather than introducing arbitrary category strings.
+      await this.getCategoryBehaviorType(userId, recipientCategory);
       acceptorSideCategory = recipientCategory;
     }
 
@@ -295,6 +307,26 @@ export class ContactsService {
       { id: requestId, toUserId: userId },
       { status: 'rejected', respondedAt: new Date() },
     );
+  }
+
+  /** Resolve the sender's category behavior from their own category definition. */
+  private async getCategoryBehaviorType(
+    userId: string,
+    categoryName: string,
+  ): Promise<'STANDARD' | 'PROFESSIONAL'> {
+    const category = await this.categoryRepository
+      .createQueryBuilder('category')
+      .where('LOWER(category.name) = LOWER(:categoryName)', { categoryName })
+      .andWhere('(category.isSystem = :isSystem OR category.userId = :userId)', {
+        isSystem: true,
+        userId,
+      })
+      .getOne();
+
+    if (!category) {
+      throw new BadRequestException('Selected category is not available to this user');
+    }
+    return category.behaviorType;
   }
 
   // ─── Device Contacts Sync ───────────────────────────────────────────────────

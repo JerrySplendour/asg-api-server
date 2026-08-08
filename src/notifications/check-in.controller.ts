@@ -22,8 +22,7 @@ export class CheckInController {
    */
   @Get('settings')
   async getSettings(@Req() req: AuthenticatedRequest) {
-    const settings = await this.checkInScheduler.getSettings(req.user.userId);
-    return settings ?? { isEnabled: false, enabledCategories: ['family'] };
+    return this.checkInScheduler.getSettings(req.user.userId);
   }
 
   /**

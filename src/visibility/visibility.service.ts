@@ -20,7 +20,7 @@ export class VisibilityService {
 
     // Initialize if not exists
     if (settings.length === 0) {
-      const categories = ['family', 'company', 'missionaries', 'regular', 'untracked'];
+      const categories = ['family', 'company', 'missionaries', 'friend', 'public_service'];
       for (const category of categories) {
         const setting = this.visibilitySettingsRepository.create({
           userId,

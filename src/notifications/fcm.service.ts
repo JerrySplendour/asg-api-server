@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import * as admin from 'firebase-admin';
+import { resolve } from 'path';
 
 export interface FcmPayload {
   title: string;
@@ -42,7 +43,7 @@ export class FcmService {
       // Avoid duplicate initialization if the app is already initialised
       if (!admin.apps.length) {
         // eslint-disable-next-line @typescript-eslint/no-var-requires
-        const serviceAccount = require(serviceAccountPath);
+        const serviceAccount = require(resolve(process.cwd(), serviceAccountPath));
         this.app = admin.initializeApp({
           credential: admin.credential.cert(serviceAccount),
         });
@@ -63,6 +64,9 @@ export class FcmService {
    * Send a push notification to a single device FCM token.
    */
   async sendToDevice(fcmToken: string, payload: FcmPayload): Promise<boolean> {
+    if (this.isExpoPushToken(fcmToken)) {
+      return (await this.sendExpoPush([fcmToken], payload)) > 0;
+    }
     if (!this.isReady || !fcmToken) return false;
 
     const message: admin.messaging.Message = {
@@ -113,13 +117,17 @@ export class FcmService {
    * Returns the count of successful sends.
    */
   async sendToMultiple(fcmTokens: string[], payload: FcmPayload): Promise<number> {
-    if (!this.isReady || !fcmTokens.length) return 0;
-
     const validTokens = fcmTokens.filter(Boolean);
     if (!validTokens.length) return 0;
 
+    const expoTokens = validTokens.filter((token) => this.isExpoPushToken(token));
+    const nativeFcmTokens = validTokens.filter((token) => !this.isExpoPushToken(token));
+    const expoSuccesses = expoTokens.length ? await this.sendExpoPush(expoTokens, payload) : 0;
+    if (!nativeFcmTokens.length) return expoSuccesses;
+    if (!this.isReady) return expoSuccesses;
+
     const message: admin.messaging.MulticastMessage = {
-      tokens: validTokens,
+      tokens: nativeFcmTokens,
       notification: {
         title: payload.title,
         body: payload.body,
@@ -155,10 +163,10 @@ export class FcmService {
         },
         'FCM multicast sent',
       );
-      return result.successCount;
+      return expoSuccesses + result.successCount;
     } catch (err) {
       this.logger.error({ err }, 'FCM multicast error');
-      return 0;
+      return expoSuccesses;
     }
   }
 
@@ -168,5 +176,37 @@ export class FcmService {
     return Object.fromEntries(
       Object.entries(data).map(([k, v]) => [k, String(v ?? '')]),
     );
+  }
+
+  private isExpoPushToken(token: string): boolean {
+    return /^ExponentPushToken\[.+\]$|^ExpoPushToken\[.+\]$/.test(token);
+  }
+
+  /** Sends Expo tokens via Expo's gateway, which then uses FCM/APNs per platform. */
+  private async sendExpoPush(tokens: string[], payload: FcmPayload): Promise<number> {
+    let successCount = 0;
+    for (let index = 0; index < tokens.length; index += 100) {
+      const messages = tokens.slice(index, index + 100).map((to) => ({
+        to,
+        title: payload.title,
+        body: payload.body,
+        data: payload.data,
+        sound: 'default',
+        priority: payload.priority ?? 'normal',
+        channelId: payload.androidChannelId ?? 'asg_default',
+      }));
+      try {
+        const response = await fetch('https://exp.host/--/api/v2/push/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify(messages),
+        });
+        const result = await response.json() as { data?: Array<{ status?: string }> };
+        successCount += result.data?.filter((ticket) => ticket.status === 'ok').length ?? 0;
+      } catch (err) {
+        this.logger.error({ err }, 'Expo push send error');
+      }
+    }
+    return successCount;
   }
 }

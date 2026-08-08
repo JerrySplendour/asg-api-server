@@ -90,13 +90,16 @@ export class ContactsController {
 
   @Post('requests')
   async sendContactRequest(@Req() req: AuthenticatedRequest, @Body() body: any) {
-    const categoryBehaviorType: 'STANDARD' | 'PROFESSIONAL' =
-      body.categoryBehaviorType === 'PROFESSIONAL' ? 'PROFESSIONAL' : 'STANDARD';
+    const sender = await this.contactsService.getSenderDetails(req.user.userId);
+    const categoryBehaviorType = await this.contactsService.getCategoryBehaviorTypeForRequest(
+      req.user.userId,
+      body.category,
+    );
 
     const result = await this.contactsService.sendContactRequest(
       req.user.userId,
       body.toUserId,
-      body.fromUserName,
+      sender,
       body.category,
       categoryBehaviorType,
       body.message,
@@ -105,7 +108,7 @@ export class ContactsController {
     // Real-time WebSocket notification to the recipient
     this.trackingGateway.notifyContactRequest(
       body.toUserId,
-      body.fromUserName,
+      sender,
       result.id,
       body.category,
       categoryBehaviorType,

@@ -78,7 +78,17 @@ export class CheckInSchedulerService {
   }
 
   async getSettings(userId: string): Promise<UserCheckIn | null> {
-    return this.checkInRepository.findOne({ where: { userId } });
+    let record = await this.checkInRepository.findOne({ where: { userId } });
+    if (!record) {
+      record = this.checkInRepository.create({
+        userId,
+        isEnabled: true,
+        lastConfirmedAt: Date.now(),
+        enabledCategories: ['family'],
+      });
+      record = await this.checkInRepository.save(record);
+    }
+    return record;
   }
 
   // ─── Scheduler ──────────────────────────────────────────────────────────────

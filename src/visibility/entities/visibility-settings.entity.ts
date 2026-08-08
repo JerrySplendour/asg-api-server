@@ -28,10 +28,8 @@ export class VisibilitySettings {
   @Column()
   userId!: string;
 
-  @Column({
-    type: 'varchar',
-    enum: ['family', 'company', 'missionaries', 'regular', 'untracked'],
-  })
+  /** Free-form name to support user-defined categories. */
+  @Column({ type: 'varchar' })
   category!: string;
 
   @Column({ default: true })
