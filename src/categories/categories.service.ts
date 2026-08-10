@@ -39,6 +39,15 @@ export class CategoriesService implements OnApplicationBootstrap {
 
   /** Seed system categories on app startup if they don't already exist. */
   async onApplicationBootstrap() {
+    await this.ensureSystemCategories();
+  }
+
+  /**
+   * Keep this idempotent and call it from reads as well as startup. This
+   * repairs databases deployed with the migration but before a successful
+   * application bootstrap, so GET /categories always returns the defaults.
+   */
+  private async ensureSystemCategories() {
     for (const cat of SYSTEM_CATEGORIES) {
       const exists = await this.categoryRepository.findOne({
         where: { name: cat.name, isSystem: true },
@@ -58,6 +67,7 @@ export class CategoriesService implements OnApplicationBootstrap {
    * - User's own custom categories
    */
   async getUserCategories(userId: string): Promise<UserCategory[]> {
+    await this.ensureSystemCategories();
     const system = await this.categoryRepository.find({
       where: { isSystem: true },
       order: { name: 'ASC' },
