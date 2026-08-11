@@ -20,17 +20,20 @@ interface AuthenticatedRequest extends Request {
 @Controller('trips')
 @UseGuards(JwtGuard)
 export class TripsController {
-  constructor(private tripsService: TripsService) {}
+  constructor(private tripsService: TripsService) { }
 
   @Get()
   async getTrips(
     @Req() req: AuthenticatedRequest,
-    @Query('limit') limit: number = 50,
-    @Query('offset') offset: number = 0,
+    @Query('limit') limit: string = '50',
+    @Query('offset') offset: string = '0',
   ) {
-    return this.tripsService.getTrips(req.user.userId, limit, offset);
+    return this.tripsService.getTrips(
+      req.user.userId,
+      parseInt(limit, 10) || 50,
+      parseInt(offset, 10) || 0
+    );
   }
-
   @Get('active')
   async getActiveTrip(@Req() req: AuthenticatedRequest) {
     return this.tripsService.getActiveTrip(req.user.userId);
@@ -75,9 +78,10 @@ export class TripsController {
   async getContactTripHistory(
     @Req() req: AuthenticatedRequest,
     @Param('contactId') contactId: string,
-    @Query('limit') limit: number = 50,
+    @Query('limit') limit: string = '50',
   ) {
-    return this.tripsService.getContactTripHistory(req.user.userId, contactId, limit);
+    const parsedLimit = parseInt(limit, 10) || 50;
+    return this.tripsService.getContactTripHistory(req.user.userId, contactId, parsedLimit);
   }
 
   @Get(':id')
