@@ -24,7 +24,7 @@ export class ContactsController {
   constructor(
     private contactsService: ContactsService,
     private trackingGateway: TrackingGateway,
-  ) {}
+  ) { }
 
   @Get()
   async getContacts(@Req() req: AuthenticatedRequest) {
@@ -34,6 +34,11 @@ export class ContactsController {
   @Post('emergency')
   async addEmergencyContact(@Req() req: AuthenticatedRequest, @Body() body: any) {
     return this.contactsService.addEmergencyContact(req.user.userId, body);
+  }
+
+  @Get('emergency')
+  async getEmergencyContacts(@Req() req: AuthenticatedRequest) {
+    return this.contactsService.getEmergencyContacts(req.user.userId);
   }
 
   // ─── Contact Requests ───────────────────────────────────────────────────────
@@ -69,10 +74,6 @@ export class ContactsController {
 
   // ─── Emergency Contacts ─────────────────────────────────────────────────────
 
-  @Get('emergency')
-  async getEmergencyContacts(@Req() req: AuthenticatedRequest) {
-    return this.contactsService.getEmergencyContacts(req.user.userId);
-  }
 
   @Patch('emergency/:id')
   async updateEmergencyContact(
