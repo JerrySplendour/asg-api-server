@@ -80,12 +80,14 @@ export class TripsService {
     endDate?: string,
     limit: number = 50,
   ): Promise<Trip[]> {
+    const safeLimit = Number(limit) || 50;
+
     let query = this.tripRepository
       .createQueryBuilder('trip')
       .where('trip.userId = :userId', { userId })
       .andWhere('trip.isActive = false')
       .orderBy('trip.startTime', 'DESC')
-      .limit(limit);
+      .limit(safeLimit);
 
     if (startDate) {
       query = query.andWhere('trip.startTime >= :startTime', { startTime: new Date(startDate).getTime() });

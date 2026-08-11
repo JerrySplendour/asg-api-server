@@ -65,9 +65,10 @@ export class TripsController {
     @Req() req: AuthenticatedRequest,
     @Query('startDate') startDate: string,
     @Query('endDate') endDate: string,
-    @Query('limit') limit: number = 50,
+    @Query('limit') limit: string = '50',
   ) {
-    return this.tripsService.getTripHistory(req.user.userId, startDate, endDate, limit);
+    const parsedLimit = parseInt(limit, 10) || 50; 
+    return this.tripsService.getTripHistory(req.user.userId, startDate, endDate, parsedLimit);
   }
 
   /**
