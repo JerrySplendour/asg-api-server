@@ -9,6 +9,7 @@ import { logger } from '../lib/logger';
 import { TrackingGateway } from '../gateway/tracking.gateway';
 import { FcmService } from '../notifications/fcm.service';
 import { UserCategory } from '../categories/entities/category.entity';
+import { normalizePhoneNumber } from '../common/utils/phone-number.util';
 
 /** Default category name contacts fall back to when their category is deleted. */
 const FALLBACK_CATEGORY = 'friend';
@@ -32,13 +33,20 @@ export class ContactsService {
 
   async findUserByPhone(phoneNumber: string): Promise<User | null> {
     if (!phoneNumber) return null;
-    const normalized = phoneNumber.replace(/[\s\-\(\)]/g, '');
+    const normalized = normalizePhoneNumber(phoneNumber);
+    const digitsOnly = normalized.replace(/\D/g, '');
+    const last10 = digitsOnly.slice(-10);
+
+    // Primary search: exact normalized match
+    let user = await this.userRepository.findOne({ where: { phoneNumber: normalized } });
+    if (user) return user;
+
+    // Secondary search: fallback matching on normalized database values or ending 10 digits
     return this.userRepository
       .createQueryBuilder('user')
-      .where(
-        "REPLACE(REPLACE(REPLACE(REPLACE(user.phoneNumber, ' ', ''), '-', ''), '(', ''), ')', '') = :phone",
-        { phone: normalized },
-      )
+      .where('user.phoneNumber = :normalized', { normalized })
+      .orWhere("RIGHT(REGEXP_REPLACE(user.phoneNumber, '[^0-9]', '', 'g'), 10) = :last10", { last10 })
+      .orWhere("REPLACE(REPLACE(REPLACE(REPLACE(user.phoneNumber, ' ', ''), '-', ''), '(', ''), ')', '') = :raw", { raw: phoneNumber })
       .getOne();
   }
 
@@ -71,12 +79,17 @@ export class ContactsService {
 
   async addContact(userId: string, contactData: any): Promise<Contact> {
     try {
-      const contact = this.contactRepository.create({ ...contactData, userId });
+      const normalizedPhone = contactData.phoneNumber ? normalizePhoneNumber(contactData.phoneNumber) : '';
+      const contact = this.contactRepository.create({
+        ...contactData,
+        phoneNumber: normalizedPhone || contactData.phoneNumber,
+        userId,
+      });
       const saved = await this.contactRepository.save(contact);
       const resultContact = Array.isArray(saved) ? saved[0] : saved;
 
-      if (contactData.phoneNumber) {
-        const targetUser = await this.findUserByPhone(contactData.phoneNumber);
+      if (contactData.phoneNumber || normalizedPhone) {
+        const targetUser = await this.findUserByPhone(normalizedPhone || contactData.phoneNumber);
 
         if (targetUser && targetUser.id !== userId) {
           const senderUser = await this.userRepository.findOne({ where: { id: userId } });
@@ -365,14 +378,7 @@ export class ContactsService {
   ): Promise<{ phoneNumber: string; userId: string; displayName: string }[]> {
     const results: { phoneNumber: string; userId: string; displayName: string }[] = [];
     for (const phone of phoneNumbers) {
-      const normalized = phone.replace(/[\s\-\(\)]/g, '');
-      const user = await this.userRepository
-        .createQueryBuilder('user')
-        .where(
-          "REPLACE(REPLACE(REPLACE(REPLACE(user.phoneNumber, ' ', ''), '-', ''), '(', ''), ')', '') = :phone",
-          { phone: normalized },
-        )
-        .getOne();
+      const user = await this.findUserByPhone(phone);
       if (user) {
         results.push({
           phoneNumber: phone,

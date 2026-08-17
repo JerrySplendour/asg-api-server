@@ -7,10 +7,11 @@ import { FcmService } from './fcm.service';
 import { User } from '../common/entities/user.entity';
 import { Contact } from '../contacts/entities/contact.entity';
 import { EmergencyAlert } from '../emergency/entities/emergency-alert.entity';
+import { Location } from '../locations/entities/location.entity';
 
-const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
-const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
-const FIFTEEN_HOURS_MS = 15 * 60 * 60 * 1000;
+const SIX_HOURS_MS = 6 * 60 * 60 * 1000; // T+6h (First Safety Check-In)
+const NINE_HOURS_MS = 9 * 60 * 60 * 1000; // T+9h (3h later: Concern Notice #2)
+const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000; // T+12h (3h later: Auto-Panic Emergency Notice)
 
 @Injectable()
 export class CheckInSchedulerService {
@@ -25,6 +26,8 @@ export class CheckInSchedulerService {
     private contactRepository: Repository<Contact>,
     @InjectRepository(EmergencyAlert)
     private alertRepository: Repository<EmergencyAlert>,
+    @InjectRepository(Location)
+    private locationRepository: Repository<Location>,
     private fcmService: FcmService,
   ) { }
 
@@ -98,8 +101,8 @@ export class CheckInSchedulerService {
    *
    * Timeline from lastConfirmedAt:
    *   T+6h  → Push Notification #1 ("Safety Check-in")
-   *   T+12h → Push Notification #2 (warning — no response to #1)
-   *   T+15h → Auto-panic triggered for enabled categories
+   *   T+9h  → Push Notification #2 (3 hours later concern warning)
+   *   T+12h → Auto-panic triggered for enabled categories (3 hours later emergency)
    */
   @Cron(CronExpression.EVERY_5_MINUTES)
   async runCheckInCycle() {
@@ -130,9 +133,9 @@ export class CheckInSchedulerService {
     const user = await this.userRepository.findOne({ where: { id: record.userId } });
     if (!user) return;
 
-    // ── T+15h: Auto-panic ──────────────────────────────────────────────────
+    // ── T+12h: Auto-panic (3 hours after concern notification) ──────────────
     if (
-      elapsedMs >= FIFTEEN_HOURS_MS &&
+      elapsedMs >= TWELVE_HOURS_MS &&
       !record.autoPanicTriggeredAt &&
       record.secondNotificationSentAt // only if 2nd notification was actually sent
     ) {
@@ -145,15 +148,15 @@ export class CheckInSchedulerService {
       return;
     }
 
-    // ── T+12h: Second notification ─────────────────────────────────────────
+    // ── T+9h: Second notification (Concern Alert - 3 hours after 1st notice) ─
     if (
-      elapsedMs >= TWELVE_HOURS_MS &&
+      elapsedMs >= NINE_HOURS_MS &&
       !record.secondNotificationSentAt
     ) {
       if (user.fcmToken) {
         await this.fcmService.sendToDevice(user.fcmToken, {
-          title: '⚠️ Safety Check-In',
-          body: `We haven't heard from you. Please confirm you're okay — your contacts will be alerted if you don't respond soon.`,
+          title: '⚠️ Safety Concern Check-In',
+          body: `We haven't heard from you in 9 hours. Please confirm you're okay — your contacts will be alerted in 3 hours if you don't respond.`,
           priority: 'high',
           androidChannelId: 'asg_checkin',
           data: {
@@ -168,7 +171,7 @@ export class CheckInSchedulerService {
       return;
     }
 
-    // ── T+6h: First notification ───────────────────────────────────────────
+    // ── T+6h: First notification (Safety Check-In) ─────────────────────────
     if (
       elapsedMs >= SIX_HOURS_MS &&
       !record.firstNotificationSentAt
@@ -196,15 +199,25 @@ export class CheckInSchedulerService {
    * enabled check-in categories via FCM.
    */
   private async triggerAutoPanic(record: UserCheckIn, user: User): Promise<void> {
+    // Fetch user's latest recorded location point
+    const latestLoc = await this.locationRepository.findOne({
+      where: { userId: record.userId },
+      order: { timestamp: 'DESC' },
+    });
+
+    const locationData = latestLoc
+      ? { latitude: latestLoc.latitude, longitude: latestLoc.longitude, accuracy: latestLoc.accuracy, timestamp: latestLoc.timestamp }
+      : { latitude: 0, longitude: 0, accuracy: 0, timestamp: Date.now() };
+
     // Create an emergency alert record
     const alert = this.alertRepository.create({
       userId: record.userId,
       type: 'manual',
-      location: { latitude: 0, longitude: 0, accuracy: 0, timestamp: Date.now() },
+      location: locationData,
       timestamp: Date.now(),
       isActive: true,
       notifiedContacts: [],
-      message: 'Auto-triggered: no check-in response after 15 hours',
+      message: 'Auto-triggered: no check-in response after 12 hours',
     });
     await this.alertRepository.save(alert);
 
@@ -233,7 +246,7 @@ export class CheckInSchedulerService {
     if (fcmTokens.length > 0) {
       await this.fcmService.sendToMultiple(fcmTokens, {
         title: '🚨 SAFETY ALERT',
-        body: `${user.displayName || 'A contact'} has not checked in for 15 hours and may need help.`,
+        body: `${user.displayName || 'A contact'} has not checked in for 12 hours and may need help.`,
         priority: 'high',
         androidChannelId: 'asg_emergency',
         data: {

@@ -8,11 +8,12 @@ import { UserCheckIn } from './entities/user-check-in.entity';
 import { User } from '../common/entities/user.entity';
 import { Contact } from '../contacts/entities/contact.entity';
 import { EmergencyAlert } from '../emergency/entities/emergency-alert.entity';
+import { Location } from '../locations/entities/location.entity';
 
 @Module({
   imports: [
     ScheduleModule.forRoot(),
-    TypeOrmModule.forFeature([UserCheckIn, User, Contact, EmergencyAlert]),
+    TypeOrmModule.forFeature([UserCheckIn, User, Contact, EmergencyAlert, Location]),
   ],
   controllers: [CheckInController],
   providers: [FcmService, CheckInSchedulerService],

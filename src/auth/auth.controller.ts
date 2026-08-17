@@ -9,6 +9,21 @@ import { JwtGuard } from './guards/jwt.guard';
 export class AuthController {
   constructor(private authService: AuthService) {}
 
+  @Post('request-otp')
+  async requestOtp(@Body() body: { phoneNumber: string }) {
+    return this.authService.requestOtp(body.phoneNumber);
+  }
+
+  @Post('verify-otp')
+  async verifyOtp(@Body() body: { phoneNumber: string; otp: string }) {
+    return this.authService.verifyOtp(body.phoneNumber, body.otp);
+  }
+
+  @Post('complete-onboarding')
+  async completeOnboarding(@Body() body: { onboardingToken: string; displayName: string; email?: string }) {
+    return this.authService.completeOnboarding(body.onboardingToken, body.displayName, body.email);
+  }
+
   @Post('login')
   async login(@Body() loginDto: LoginDto) {
     return this.authService.login(loginDto);
