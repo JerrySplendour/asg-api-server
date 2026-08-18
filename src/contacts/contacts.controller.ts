@@ -48,6 +48,11 @@ export class ContactsController {
     return this.contactsService.getPendingContactRequests(req.user.userId);
   }
 
+  @Get('requests/sent')
+  async getSentContactRequests(@Req() req: AuthenticatedRequest) {
+    return this.contactsService.getSentContactRequests(req.user.userId);
+  }
+
   @Get(':id')
   async getContactById(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
     return this.contactsService.getContactById(req.user.userId, id);

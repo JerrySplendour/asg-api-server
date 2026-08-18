@@ -180,6 +180,14 @@ export class ContactsService {
   async getPendingContactRequests(userId: string): Promise<ContactRequest[]> {
     return this.contactRequestRepository.find({
       where: { toUserId: userId, status: 'pending' },
+      order: { createdAt: 'DESC' },
+    });
+  }
+
+  async getSentContactRequests(userId: string): Promise<ContactRequest[]> {
+    return this.contactRequestRepository.find({
+      where: { fromUserId: userId },
+      order: { createdAt: 'DESC' },
     });
   }
 
