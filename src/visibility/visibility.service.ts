@@ -26,7 +26,7 @@ export class VisibilityService {
           userId,
           category,
           isVisible: category === 'family',
-          enableCheckIn: false,
+          enableCheckIn: true,
           isPanicCategory: category === 'family',
         });
         await this.visibilitySettingsRepository.save(setting);

@@ -13,6 +13,14 @@ const SIX_HOURS_MS = 6 * 60 * 60 * 1000; // T+6h (First Safety Check-In)
 const NINE_HOURS_MS = 9 * 60 * 60 * 1000; // T+9h (3h later: Concern Notice #2)
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000; // T+12h (3h later: Auto-Panic Emergency Notice)
 
+export const DEFAULT_CHECKIN_CATEGORIES = [
+  'family',
+  'friend',
+  'company',
+  'missionaries',
+  'public_service',
+];
+
 @Injectable()
 export class CheckInSchedulerService {
   private readonly logger = new Logger(CheckInSchedulerService.name);
@@ -46,7 +54,7 @@ export class CheckInSchedulerService {
         userId,
         isEnabled: true,
         lastConfirmedAt: now,
-        enabledCategories: ['family'],
+        enabledCategories: DEFAULT_CHECKIN_CATEGORIES,
       });
     } else {
       record.lastConfirmedAt = now;
@@ -71,7 +79,7 @@ export class CheckInSchedulerService {
         userId,
         lastConfirmedAt: Date.now(),
         isEnabled: data.isEnabled ?? true,
-        enabledCategories: data.enabledCategories ?? ['family'],
+        enabledCategories: data.enabledCategories ?? DEFAULT_CHECKIN_CATEGORIES,
       });
     } else {
       if (data.isEnabled !== undefined) record.isEnabled = data.isEnabled;
@@ -87,7 +95,7 @@ export class CheckInSchedulerService {
         userId,
         isEnabled: true,
         lastConfirmedAt: Date.now(),
-        enabledCategories: ['family'],
+        enabledCategories: DEFAULT_CHECKIN_CATEGORIES,
       });
       record = await this.checkInRepository.save(record);
     }
